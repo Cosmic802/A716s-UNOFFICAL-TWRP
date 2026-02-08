@@ -1,70 +1,65 @@
-name: TWRP Build Server Side
+name: Build TWRP for A716S
 
 on:
-  workflow_dispatch:
+  workflow_dispatch: # Энэ нь товчлуур дарж эхлүүлэх боломжийг олгоно
 
 jobs:
   build:
-    runs-on: ubuntu-22.04
+    runs-on: ubuntu-20.04
     
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+    - name: Checkout
+      uses: actions/checkout@v2
 
-      - name: Maximize Server Space
-        run: |
-          # Сервер дээрх хэрэггүй зүйлсийг устгаж 30GB+ зай гаргана
-          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /usr/local/share/boost /usr/local/openjdk* /usr/local/share/powershell /usr/local/share/chromium
-          sudo apt-get clean
-          sudo docker image prune -a -f
+    - name: Clean Up Disk Space (Зай суллах)
+      uses: rohit2801/android-recovery-action@v1
+      # Энэ action нь автоматаар Android build хийх орчинг бэлдэж, зай сулладаг.
+      # Хэрэв гар аргаар хийх бол доорх коммандуудыг ашигладаг.
 
-           - name: Install Tools
-        run: |
-          sudo apt update
-          sudo apt install -y bc build-essential curl git gperf gcc-multilib g++-multilib \
-          lib32ncurses5-dev lib32readline-dev lib32z1-dev liblz4-tool libncurses5 \
-          libncurses5-dev libsdl1.2-dev libssl-dev libxml2 libxml2-utils lzop pngcrush \
-          rsync schedtool squashfs-tools xsltproc zip zlib1g-dev \
-          python3 python-is-python3 imagemagick libtinfo5
+    - name: Install Dependencies (Хэрэгтэй зүйлс суулгах)
+      run: |
+        sudo apt update
+        sudo apt -y install git-core gnupg flex bison build-essential zip curl zlib1g-dev gcc-multilib g++-multilib libc6-dev-i386 lib32ncurses5-dev x11proto-core-dev libx11-dev lib32z1-dev libgl1-mesa-dev libxml2-utils xsltproc unzip fontconfig
 
-      - name: Set up Repo
-        run: |
-          mkdir -p ~/bin
-          curl https://storage.googleapis.com/git-repo-downloads/repo > ~/bin/repo
-          chmod a+x ~/bin/repo
-          git config --global user.email "bot@github.com"
-          git config --global user.name "GitHub Actions"
-          echo "$HOME/bin" >> $GITHUB_PATH
+    - name: Install Repo Tool
+      run: |
+        mkdir ~/bin
+        curl https://storage.googleapis.com/git-repo-downloads/repo > ~/bin/repo
+        chmod a+x ~/bin/repo
+        export PATH=~/bin:$PATH
 
-      - name: Sync TWRP Source (Fixing the Error)
-        run: |
-          mkdir -p ~/twrp && cd ~/twrp
-          # --depth=1 нь зөвхөн repo init дээр байх ёстой
-          repo init --depth=1 -u https://github.com/minimal-manifest-twrp/platform_manifest_twrp_aosp.git -b twrp-14.1
-          # repo sync-ээс --depth-ийг хассан, одоо алдаа заахгүй
-          repo sync -c -j$(nproc --all) --force-sync --no-clone-bundle --no-tags
-          
-          # Linux-д хэрэггүй Darwin/Windows файлуудыг устгаж зай гаргана
-          rm -rf prebuilts/clang/host/darwin-x86
-          rm -rf prebuilts/gcc/linux-x86/host/x86_64-w64-mingw32-4.8
+    - name: Initialize Repo (Эх код татах - Minimal)
+      run: |
+        export PATH=~/bin:$PATH
+        mkdir workspace
+        cd workspace
+        # Android 11/12/13 дээр суурилсан TWRP-12.1 салбарыг сонгож байна (A71-д тохиромжтой байх магадлалтай)
+        repo init --depth=1 -u https://github.com/minimal-manifest-twrp/platform_manifest_twrp_aosp.git -b twrp-12.1
+        repo sync -j$(nproc --all) --force-sync
 
-      - name: Clone Device Tree
-        run: |
-          cd ~/twrp
-          git clone https://github.com/Cosmic802/A716s-UNOFFICAL-TWRP device
-          git clone https://github.com/Cosmic802/A716s-UNOFFICAL-TWRP device/samsung/a716s
+    - name: Clone Device Tree (Таны Device Tree-г хуулах)
+      run: |
+        cd workspace
+        # ЭНД ӨӨРИЙН GITHUB LINK-ЭЭ ТАВИНА UU!!!
+        # Жишээ нь: git clone https://github.com/TaniiNer/android_device_samsung_a716s device/samsung/a716s
+        git clone https://github.com/INSERT_YOUR_USERNAME/INSERT_YOUR_REPO_NAME device/samsung/a716s
 
-      - name: Build TWRP
-        run: |
-          cd ~/twrp
-          export ALLOW_MISSING_DEPENDENCIES=true
-          source build/envsetup.sh
-          lunch twrp_a716s-eng || lunch omni_a716s-eng
-          mka recoveryimage -j$(nproc --all)
+    - name: Build TWRP (Build хийх)
+      run: |
+        export PATH=~/bin:$PATH
+        cd workspace
+        export ALLOW_MISSING_DEPENDENCIES=true
+        source build/envsetup.sh
+        
+        # ЭНД LUNCH COMMAND-ИЙГ ШАЛГААРАЙ
+        # Таны device tree доторх `vendorsetup.sh` эсвэл `AndroidProducts.mk` дотор нэр нь байгаа.
+        # Ихэнхдээ: twrp_a716s-eng эсвэл omni_a716s-eng байдаг.
+        lunch twrp_a716s-eng 
+        
+        mka recoveryimage
 
-      - name: Upload Result
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: TWRP-A716S-IMG
-          path: /home/runner/twrp/out/target/product/a716s/*.img
+    - name: Upload Recovery Image (Файлыг татаж авах)
+      uses: actions/upload-artifact@v3
+      with:
+        name: TWRP-Recovery
+        path: workspace/out/target/product/a716s/recovery.img
