@@ -52,16 +52,22 @@ jobs:
           cd ~/twrp
           git clone https://github.com/Cosmic802/A716s-UNOFFICAL-TWRP device/samsung/a716s
 
-      - name: Build
+            - name: Build
         run: |
           cd ~/twrp
+          # Хүрээлэн буй орчныг бэлдэх
           export ALLOW_MISSING_DEPENDENCIES=true
           source build/envsetup.sh
-          lunch twrp_a716s-eng
+          
+          # Төхөөрөмжөө сонгох (lunch команд)
+          # Хэрэв twrp_a716s-eng ажиллахгүй бол omni_a716s-eng гэж оролдоорой
+          lunch twrp_a716s-eng || lunch omni_a716s-eng
+          
+          # Recovery image-ийг хийж эхлэх
           mka recoveryimage -j$(nproc --all)
 
-      - name: Upload Artifact
+      - name: Upload Recovery
         uses: actions/upload-artifact@v4
         with:
-          name: TWRP-Recovery-A716S
-          path: /home/runner/twrp/out/target/product/a716s/recovery.img
+          name: TWRP-A716S-Build
+          path: ~/twrp/out/target/product/a716s/*.img
