@@ -52,7 +52,7 @@ jobs:
           cd ~/twrp
           git clone https://github.com/Cosmic802/A716s-UNOFFICAL-TWRP device/samsung/a716s
 
-            - name: Build
+      - name: Build
         run: |
           cd ~/twrp
           # Хүрээлэн буй орчныг бэлдэх
