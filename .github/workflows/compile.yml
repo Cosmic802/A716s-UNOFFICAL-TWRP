@@ -14,11 +14,7 @@ jobs:
       - name: Free Disk Space
         run: |
           sudo docker image prune -a -f
-          sudo rm -rf /usr/share/dotnet
-          sudo rm -rf /usr/local/lib/android
-          sudo rm -rf /opt/ghc
-          sudo rm -rf /usr/local/share/boost
-          sudo rm -rf "$AGENT_TOOLSDIRECTORY"
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /usr/local/share/boost
           sudo apt-get clean
           df -h
 
@@ -52,22 +48,19 @@ jobs:
           cd ~/twrp
           git clone https://github.com/Cosmic802/A716s-UNOFFICAL-TWRP device/samsung/a716s
 
-      - name: Build
+      - name: Build TWRP
         run: |
           cd ~/twrp
-          # Хүрээлэн буй орчныг бэлдэх
           export ALLOW_MISSING_DEPENDENCIES=true
           source build/envsetup.sh
-          
-          # Төхөөрөмжөө сонгох (lunch команд)
-          # Хэрэв twrp_a716s-eng ажиллахгүй бол omni_a716s-eng гэж оролдоорой
           lunch twrp_a716s-eng || lunch omni_a716s-eng
-          
-          # Recovery image-ийг хийж эхлэх
           mka recoveryimage -j$(nproc --all)
 
-      - name: Upload Recovery
+      - name: Upload Result
+        if: always()
         uses: actions/upload-artifact@v4
         with:
           name: TWRP-A716S-Build
-          path: ~/twrp/out/target/product/a716s/*.img
+          path: |
+            /home/runner/twrp/out/target/product/a716s/*.img
+            /home/runner/twrp/out/target/product/a716s/*.zip
