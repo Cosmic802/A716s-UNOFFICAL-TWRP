@@ -11,17 +11,11 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Cleanup Disk Space (Extreme)
+      - name: Maximize Disk Space
         run: |
-          sudo rm -rf /usr/share/dotnet
-          sudo rm -rf /usr/local/lib/android
-          sudo rm -rf /opt/ghc
-          sudo rm -rf /usr/local/share/boost
-          sudo rm -rf /usr/local/openjdk*
-          sudo rm -rf /usr/local/share/powershell
-          sudo rm -rf /usr/local/share/chromium
-          sudo apt-get clean
           sudo docker image prune -a -f
+          sudo rm -rf /usr/share/dotnet /usr/local/lib/android /opt/ghc /usr/local/share/boost /usr/local/openjdk* /usr/local/share/powershell /usr/local/share/chromium
+          sudo apt-get clean
           df -h
 
       - name: Install Build Tools
@@ -46,8 +40,12 @@ jobs:
         run: |
           mkdir -p ~/twrp && cd ~/twrp
           repo init --depth=1 -u https://github.com/minimal-manifest-twrp/platform_manifest_twrp_aosp.git -b twrp-14.1
-          # Зай хэмнэх үүднээс зөвхөн шаардлагатайг татах
           repo sync -c -j$(nproc --all) --force-sync --no-clone-bundle --no-tags --depth=1
+          
+          # ЗАЙ ГАРГАХ ЧУХАЛ ХЭСЭГ: Хэрэггүй том сангуудыг устгах
+          rm -rf prebuilts/clang/host/darwin-x86
+          rm -rf prebuilts/gcc/linux-x86/host/x86_64-w64-mingw32-4.8
+          rm -rf .repo/projects # Repo-ийн дотоод түүхийг устгаж зай гаргах
 
       - name: Clone Device Tree
         run: |
@@ -59,6 +57,7 @@ jobs:
           cd ~/twrp
           export ALLOW_MISSING_DEPENDENCIES=true
           source build/envsetup.sh
+          # lunch команд чинь twrp_a716s-eng эсвэл omni_a716s-eng байх ёстой
           lunch twrp_a716s-eng || lunch omni_a716s-eng
           mka recoveryimage -j$(nproc --all)
 
@@ -67,5 +66,4 @@ jobs:
         uses: actions/upload-artifact@v4
         with:
           name: TWRP-A716S-Build
-          path: |
-            /home/runner/twrp/out/target/product/a716s/*.img
+          path: /home/runner/twrp/out/target/product/a716s/recovery.img
