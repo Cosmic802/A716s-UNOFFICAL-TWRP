@@ -36,13 +36,15 @@ jobs:
         git config --global user.name "GitHub Actions"
         echo "$HOME/bin" >> $GITHUB_PATH
 
-        - name: Sync TWRP Source
+    - name: Sync TWRP Source
       run: |
         mkdir -p ~/twrp
         cd ~/twrp
-        # Салбарын нэрийг twrp-12.1 болгож засав
+        # Android 13-тай утсанд 12.1 эсвэл 14.1 manifest хамгийн тохиромжтой
+        # Omni биш AOSP ашиглана
         repo init --depth=1 -u https://github.com/minimal-manifest-twrp/platform_manifest_twrp_aosp.git -b twrp-12.1
         repo sync -c -j$(nproc --all) --force-sync --no-clone-bundle --no-tags
+
 
 
     - name: Clone Device Tree
