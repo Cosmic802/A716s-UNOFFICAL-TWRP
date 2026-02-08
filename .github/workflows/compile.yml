@@ -39,7 +39,7 @@ jobs:
         mka recoveryimage -j$(nproc --all)
 
     - name: Upload Artifact
-      uses: actions/upload-artifact@v3
+      uses: actions/upload-artifact@v4
       with:
         name: TWRP-A716S
         path: /home/runner/twrp/out/target/product/a71x/recovery.img
