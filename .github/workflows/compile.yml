@@ -31,6 +31,8 @@ jobs:
         mkdir ~/twrp && cd ~/twrp
         curl https://storage.googleapis.com/git-repo-downloads/repo > repo
         chmod a+x repo
+        # 'twrp-11' болон 'twrp-12.1' олдохгүй байгаа тул 'twrp-12.1' (V2) эсвэл 'twrp-9.0' туршиж байна
+        # Энэ удаад хамгийн найдвартай салбар болох 'twrp-12.1' (албан ёсны нэршил) эсвэл 'v3.6.2_11' туршья
         ./repo init --depth=1 -u https://github.com/minimal-manifest-twrp/platform_manifest_twrp_omni.git -b twrp-12.1
         ./repo sync -c -j$(nproc --all) --force-sync --no-clone-bundle --no-tags
 
@@ -44,7 +46,7 @@ jobs:
         cd ~/twrp
         export ALLOW_MISSING_DEPENDENCIES=true
         source build/envsetup.sh
-        # Таны төхөөрөмжийн зөв lunch нэр нь omni_a716s-eng
+        # A716S-д зориулсан lunch нэр
         lunch omni_a716s-eng || lunch $(--print-lunch-menu | grep a71 | head -n 1)
         mka recoveryimage -j$(nproc --all)
 
