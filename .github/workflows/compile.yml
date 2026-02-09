@@ -1,65 +1,111 @@
 name: Build TWRP for A716S
 
 on:
-  workflow_dispatch: # Энэ нь товчлуур дарж эхлүүлэх боломжийг олгоно
+  workflow_dispatch:
+    inputs:
+      MANIFEST_URL:
+        description: 'TWRP Manifest URL (Do not change usually)'
+        required: true
+        default: 'https://github.com/minimal-manifest-twrp/platform_manifest_twrp_aosp'
+      MANIFEST_BRANCH:
+        description: 'TWRP Branch (Android 12.1 for OneUI 5.x)'
+        required: true
+        default: 'twrp-12.1'
+      DEVICE_TREE_URL:
+        description: 'Device Tree URL (Ð¢Ð°Ð½Ñ‹ Ð¾Ð»ÑÐ¾Ð½ Device Tree ÑÐ½Ð´ Ð±Ð°Ð¹Ð½Ð°)'
+        required: true
+        default: 'https://github.com/Samsung-Qualcomm-Linux/android_device_samsung_a71xq'
+      DEVICE_TREE_BRANCH:
+        description: 'Device Tree Branch'
+        required: true
+        default: 'android-12.1'
+      DEVICE_PATH:
+        description: 'Device Path (Ð¶Ð¸ÑˆÑÑ: device/samsung/a71xq)'
+        required: true
+        default: 'device/samsung/a71xq'
+      DEVICE_NAME:
+        description: 'Device Codename (Ð¶Ð¸ÑˆÑÑ: a71xq)'
+        required: true
+        default: 'a71xq'
+      MAKEFILE_NAME:
+        description: 'Makefile Name (twrp_a71xq)'
+        required: true
+        default: 'twrp_a71xq'
 
 jobs:
   build:
+    if: github.event.repository.owner.id == github.event.sender.id
     runs-on: ubuntu-20.04
-    
+    timeout-minutes: 360  # Force a 6-hour build maximum
+    permissions:
+      contents: write
+
     steps:
-    - name: Checkout
-      uses: actions/checkout@v2
+    - name: Check Out
+      uses: actions/checkout@v3
 
-    - name: Clean Up Disk Space (Зай суллах)
-      uses: rohit2801/android-recovery-action@v1
-      # Энэ action нь автоматаар Android build хийх орчинг бэлдэж, зай сулладаг.
-      # Хэрэв гар аргаар хийх бол доорх коммандуудыг ашигладаг.
+    - name: Check Free Disk Space
+      run: df -h /
 
-    - name: Install Dependencies (Хэрэгтэй зүйлс суулгах)
+    - name: Cleanup Space (Ð§ÑƒÑ…Ð°Ð»: Ð—Ð°Ð¹ Ð³Ð°Ñ€Ð³Ð°Ñ… Ñ…ÑÑÑÐ³)
+      uses: rokibhasansagar/slimhub_actions@main
+
+    - name: Check Free Disk Space After Cleanup
+      run: df -h /
+
+    - name: Initialize Repo
       run: |
-        sudo apt update
-        sudo apt -y install git-core gnupg flex bison build-essential zip curl zlib1g-dev gcc-multilib g++-multilib libc6-dev-i386 lib32ncurses5-dev x11proto-core-dev libx11-dev lib32z1-dev libgl1-mesa-dev libxml2-utils xsltproc unzip fontconfig
-
-    - name: Install Repo Tool
-      run: |
-        mkdir ~/bin
-        curl https://storage.googleapis.com/git-repo-downloads/repo > ~/bin/repo
-        chmod a+x ~/bin/repo
-        export PATH=~/bin:$PATH
-
-    - name: Initialize Repo (Эх код татах - Minimal)
-      run: |
-        export PATH=~/bin:$PATH
         mkdir workspace
         cd workspace
-        # Android 11/12/13 дээр суурилсан TWRP-12.1 салбарыг сонгож байна (A71-д тохиромжтой байх магадлалтай)
-        repo init --depth=1 -u https://github.com/minimal-manifest-twrp/platform_manifest_twrp_aosp.git -b twrp-12.1
+        echo "Workspace created."
+        git config --global user.name "GitAction"
+        git config --global user.email "git@github.com"
+        repo init --depth=1 -u "${{ github.event.inputs.MANIFEST_URL }}" -b "${{ github.event.inputs.MANIFEST_BRANCH }}"
+
+    - name: Repo Sync
+      run: |
+        cd workspace
+        set -e
         repo sync -j$(nproc --all) --force-sync
+        echo "Repo sync finished."
+        ls -al
 
-    - name: Clone Device Tree (Таны Device Tree-г хуулах)
+    - name: Clone Device Tree
       run: |
         cd workspace
-        # ЭНД ӨӨРИЙН GITHUB LINK-ЭЭ ТАВИНА UU!!!
-        # Жишээ нь: git clone https://github.com/TaniiNer/android_device_samsung_a716s device/samsung/a716s
-        git clone https://github.com/INSERT_YOUR_USERNAME/INSERT_YOUR_REPO_NAME device/samsung/a716s
+        git clone "${{ github.event.inputs.DEVICE_TREE_URL }}" -b "${{ github.event.inputs.DEVICE_TREE_BRANCH }}" "${{ github.event.inputs.DEVICE_PATH }}"
 
-    - name: Build TWRP (Build хийх)
+    - name: Print Device Tree Directory
       run: |
-        export PATH=~/bin:$PATH
-        cd workspace
-        export ALLOW_MISSING_DEPENDENCIES=true
-        source build/envsetup.sh
-        
-        # ЭНД LUNCH COMMAND-ИЙГ ШАЛГААРАЙ
-        # Таны device tree доторх `vendorsetup.sh` эсвэл `AndroidProducts.mk` дотор нэр нь байгаа.
-        # Ихэнхдээ: twrp_a716s-eng эсвэл omni_a716s-eng байдаг.
-        lunch twrp_a716s-eng 
-        
-        mka recoveryimage
+        ls -al workspace/${{ github.event.inputs.DEVICE_PATH }}
 
-    - name: Upload Recovery Image (Файлыг татаж авах)
+    - name: Building TWRP
+      run: |
+        cd workspace
+        set -o pipefail
+        . build/envsetup.sh
+        lunch ${{ github.event.inputs.MAKEFILE_NAME }}-eng
+        mka recoveryimage 2>&1 | tee build.log
+
+    - name: Check Build Output Directory
+      run: |
+        export OUT_DIR="workspace/out/target/product/${{ github.event.inputs.DEVICE_NAME }}"
+        if [ ! -d "$OUT_DIR" ]; then
+          echo "Error: Build output directory not found! Something went wrong."
+          exit 1
+        fi
+        ls -lh $OUT_DIR
+
+    - name: Upload Artifact
+      if: success()
       uses: actions/upload-artifact@v3
       with:
         name: TWRP-Recovery
-        path: workspace/out/target/product/a716s/recovery.img
+        path: workspace/out/target/product/${{ github.event.inputs.DEVICE_NAME }}/*.img
+
+    - name: Upload Build Log (if failed)
+      if: failure()
+      uses: actions/upload-artifact@v3
+      with:
+        name: build-log
+        path: workspace/build.log
