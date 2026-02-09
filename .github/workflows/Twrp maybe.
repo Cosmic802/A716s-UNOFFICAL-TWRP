@@ -1,0 +1,111 @@
+name: Build TWRP for A716S
+
+on:
+  workflow_dispatch:
+    inputs:
+      MANIFEST_URL:
+        description: 'TWRP Manifest URL (Do not change usually)'
+        required: true
+        default: 'https://github.com/minimal-manifest-twrp/platform_manifest_twrp_aosp'
+      MANIFEST_BRANCH:
+        description: 'TWRP Branch (Android 12.1 for OneUI 5.x)'
+        required: true
+        default: 'twrp-12.1'
+      DEVICE_TREE_URL:
+        description: 'Device Tree URL (Ð¢Ð°Ð½Ñ‹ Ð¾Ð»ÑÐ¾Ð½ Device Tree ÑÐ½Ð´ Ð±Ð°Ð¹Ð½Ð°)'
+        required: true
+        default: 'https://github.com/Samsung-Qualcomm-Linux/android_device_samsung_a71xq'
+      DEVICE_TREE_BRANCH:
+        description: 'Device Tree Branch'
+        required: true
+        default: 'android-12.1'
+      DEVICE_PATH:
+        description: 'Device Path (Ð¶Ð¸ÑˆÑÑ: device/samsung/a71xq)'
+        required: true
+        default: 'device/samsung/a71xq'
+      DEVICE_NAME:
+        description: 'Device Codename (Ð¶Ð¸ÑˆÑÑ: a71xq)'
+        required: true
+        default: 'a71xq'
+      MAKEFILE_NAME:
+        description: 'Makefile Name (twrp_a71xq)'
+        required: true
+        default: 'twrp_a71xq'
+
+jobs:
+  build:
+    if: github.event.repository.owner.id == github.event.sender.id
+    runs-on: ubuntu-20.04
+    timeout-minutes: 360  # Force a 6-hour build maximum
+    permissions:
+      contents: write
+
+    steps:
+    - name: Check Out
+      uses: actions/checkout@v3
+
+    - name: Check Free Disk Space
+      run: df -h /
+
+    - name: Cleanup Space (Ð§ÑƒÑ…Ð°Ð»: Ð—Ð°Ð¹ Ð³Ð°Ñ€Ð³Ð°Ñ… Ñ…ÑÑÑÐ³)
+      uses: rokibhasansagar/slimhub_actions@main
+
+    - name: Check Free Disk Space After Cleanup
+      run: df -h /
+
+    - name: Initialize Repo
+      run: |
+        mkdir workspace
+        cd workspace
+        echo "Workspace created."
+        git config --global user.name "GitAction"
+        git config --global user.email "git@github.com"
+        repo init --depth=1 -u "${{ github.event.inputs.MANIFEST_URL }}" -b "${{ github.event.inputs.MANIFEST_BRANCH }}"
+
+    - name: Repo Sync
+      run: |
+        cd workspace
+        set -e
+        repo sync -j$(nproc --all) --force-sync
+        echo "Repo sync finished."
+        ls -al
+
+    - name: Clone Device Tree
+      run: |
+        cd workspace
+        git clone "${{ github.event.inputs.DEVICE_TREE_URL }}" -b "${{ github.event.inputs.DEVICE_TREE_BRANCH }}" "${{ github.event.inputs.DEVICE_PATH }}"
+
+    - name: Print Device Tree Directory
+      run: |
+        ls -al workspace/${{ github.event.inputs.DEVICE_PATH }}
+
+    - name: Building TWRP
+      run: |
+        cd workspace
+        set -o pipefail
+        . build/envsetup.sh
+        lunch ${{ github.event.inputs.MAKEFILE_NAME }}-eng
+        mka recoveryimage 2>&1 | tee build.log
+
+    - name: Check Build Output Directory
+      run: |
+        export OUT_DIR="workspace/out/target/product/${{ github.event.inputs.DEVICE_NAME }}"
+        if [ ! -d "$OUT_DIR" ]; then
+          echo "Error: Build output directory not found! Something went wrong."
+          exit 1
+        fi
+        ls -lh $OUT_DIR
+
+    - name: Upload Artifact
+      if: success()
+      uses: actions/upload-artifact@v3
+      with:
+        name: TWRP-Recovery
+        path: workspace/out/target/product/${{ github.event.inputs.DEVICE_NAME }}/*.img
+
+    - name: Upload Build Log (if failed)
+      if: failure()
+      uses: actions/upload-artifact@v3
+      with:
+        name: build-log
+        path: workspace/build.log
