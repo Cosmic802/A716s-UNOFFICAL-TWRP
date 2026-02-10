@@ -10,20 +10,24 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Manual Disk Cleanup
+      - name: Cleanup and Setup Swap
         run: |
           sudo rm -rf /usr/share/dotnet
           sudo rm -rf /usr/local/lib/android
           sudo rm -rf /opt/ghc
           sudo rm -rf "/usr/local/share/boost"
           sudo rm -rf "$AGENT_TOOLSDIRECTORY"
-          docker image prune --all --force
-          sudo apt-get clean
+          # Create 12GB Swap file
+          sudo fallocate -l 12G /swapfile
+          sudo chmod 600 /swapfile
+          sudo mkswap /swapfile
+          sudo swapon /swapfile
+          sudo free -h
 
       - name: Install Dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y bc build-essential git-core gnupg flex bison gperf libsdl1.2-dev libesd0-dev libwxgtk3.0-gtk3-dev squashfs-tools zip curl libncurses5-dev zlib1g-dev openjdk-8-jdk libreadline-dev libxml2 libxml2-utils xsltproc unzip device-tree-compiler python3 python3-pip libssl-dev
+          sudo apt-get install -y bc build-essential git-core gnupg flex bison gperf libsdl1.2-dev squashfs-tools zip curl libncurses5-dev zlib1g-dev openjdk-8-jdk libreadline-dev libxml2 libxml2-utils xsltproc unzip device-tree-compiler python3 python3-pip libssl-dev libwxgtk3.2-dev
 
       - name: Install Repo Tool
         run: |
@@ -51,14 +55,14 @@ jobs:
           cd workspace
           export ALLOW_MISSING_DEPENDENCIES=true
           source build/envsetup.sh
-          # Trying both possible lunch targets
-          lunch twrp_a716s-eng || lunch omni_a716s-eng
+          # Attempt to lunch based on common naming patterns
+          lunch twrp_a716s-eng || lunch omni_a716s-eng || lunch aosp_a716s-eng
           mka recoveryimage -j$(nproc --all)
 
       - name: Upload Result
         uses: actions/upload-artifact@v4
         with:
-          name: TWRP-A716s
+          name: TWRP-A716s-Final
           path: |
             workspace/out/target/product/a716s/recovery.img
             workspace/out/target/product/a716s/*.zip
