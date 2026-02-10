@@ -1,4 +1,4 @@
-name: Recovery Build Fixed Final
+name: Recovery Build Final Stable Fix
 
 on:
   workflow_dispatch:
@@ -42,11 +42,20 @@ jobs:
           repo init --depth=1 -u https://github.com/minimal-manifest-twrp/platform_manifest_twrp_aosp.git -b twrp-12.1
           repo sync -c -j4 --force-sync --no-tags --no-clone-bundle --optimized-fetch --prune
 
-      - name: Clone Device Tree
+      - name: Clone Device Tree and Fix Dependencies
         run: |
           cd ${{ github.workspace }}/workspace
-          # Таны хавтасны бүтцийг build системд танигдах нэрээр (a71x) татаж авна
           git clone --depth=1 https://github.com/Cosmic802/A716s-UNOFFICAL-TWRP.git -b main device/samsung/a71x
+          
+          cd device/samsung/a71x
+          
+          # 1. Omni хамаарлыг TWRP болгож солих (Хамгийн чухал засалт)
+          sed -i 's|vendor/omni/config/common.mk|vendor/twrp/config/common.mk|g' *.mk
+          
+          # 2. Файлуудын нэрийг twrp_ болгож нэгтгэх
+          mv omni_a71x.mk twrp_a71x.mk 2>/dev/null || true
+          sed -i 's/omni_a71x/twrp_a71x/g' twrp_a71x.mk 2>/dev/null || true
+          sed -i 's/omni_a71x/twrp_a71x/g' AndroidProducts.mk
 
       - name: Build Recovery
         run: |
@@ -54,13 +63,13 @@ jobs:
           export ALLOW_MISSING_DEPENDENCIES=true
           export LC_ALL=C
           source build/envsetup.sh
-          # Таны AndroidProducts.mk дээрх COMMON_LUNCH_CHOICES-той яг ижил нэрээр lunch хийнэ
-          lunch omni_a71x-eng
+          # Одоо twrp_a71x нэрээр lunch хийнэ
+          lunch twrp_a71x-eng
           mka recoveryimage -j$(nproc --all)
 
       - name: Upload Result
         uses: actions/upload-artifact@v4
         with:
-          name: TWRP-A716s-Final
+          name: TWRP-A716s-Success
           path: |
             ${{ github.workspace }}/workspace/out/target/product/a71x/recovery.img
