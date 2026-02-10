@@ -1,4 +1,4 @@
-name: Recovery Build Stable
+name: Recovery Build Final Attempt
 
 on:
   workflow_dispatch:
@@ -7,22 +7,19 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
+      - name: Maximize Build Space
+        uses: easimon/maximize-build-space@master
+        with:
+          root-reserve-mb: 2048
+          swap-size-mb: 10240
+          remove-dotnet: 'true'
+          remove-android: 'true'
+          remove-haskell: 'true'
+          remove-codeql: 'true'
+          remove-docker-images: 'true'
+
       - name: Checkout
         uses: actions/checkout@v4
-
-      - name: Cleanup and Setup Swap
-        run: |
-          sudo rm -rf /usr/share/dotnet
-          sudo rm -rf /usr/local/lib/android
-          sudo rm -rf /opt/ghc
-          sudo rm -rf "/usr/local/share/boost"
-          sudo rm -rf "$AGENT_TOOLSDIRECTORY"
-          # Create 12GB Swap file
-          sudo fallocate -l 12G /swapfile
-          sudo chmod 600 /swapfile
-          sudo mkswap /swapfile
-          sudo swapon /swapfile
-          sudo free -h
 
       - name: Install Dependencies
         run: |
@@ -38,24 +35,28 @@ jobs:
 
       - name: Initialize and Sync
         run: |
-          mkdir workspace
-          cd workspace
+          # Move workspace to the larger partition created by maximize-build-space
+          mkdir -p ${{ github.workspace }}/workspace
+          cd ${{ github.workspace }}/workspace
           git config --global user.name "Cosmic802"
           git config --global user.email "example@mail.com"
+          
+          # Initialize with extreme shallow settings
           repo init --depth=1 -u https://github.com/minimal-manifest-twrp/platform_manifest_twrp_aosp.git -b twrp-12.1
-          repo sync -c -j$(nproc --all) --force-sync --no-tags --no-clone-bundle
+          
+          # Sync with -j4 to avoid overwhelming the disk I/O, and only fetch current branch
+          repo sync -c -j4 --force-sync --no-tags --no-clone-bundle --optimized-fetch --prune
 
       - name: Clone Device Tree
         run: |
-          cd workspace
+          cd ${{ github.workspace }}/workspace
           git clone --depth=1 https://github.com/Cosmic802/A716s-UNOFFICAL-TWRP.git -b main device/samsung/a716s
 
       - name: Build Recovery
         run: |
-          cd workspace
+          cd ${{ github.workspace }}/workspace
           export ALLOW_MISSING_DEPENDENCIES=true
           source build/envsetup.sh
-          # Attempt to lunch based on common naming patterns
           lunch twrp_a716s-eng || lunch omni_a716s-eng || lunch aosp_a716s-eng
           mka recoveryimage -j$(nproc --all)
 
@@ -64,5 +65,5 @@ jobs:
         with:
           name: TWRP-A716s-Final
           path: |
-            workspace/out/target/product/a716s/recovery.img
-            workspace/out/target/product/a716s/*.zip
+            ${{ github.workspace }}/workspace/out/target/product/a716s/recovery.img
+            ${{ github.workspace }}/workspace/out/target/product/a716s/*.zip
