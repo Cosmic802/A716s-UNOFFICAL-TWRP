@@ -1,67 +1,64 @@
-name: Build TWRP - A716S
+name: Recovery Build
 
 on:
-  workflow_dispatch:
+  workflow_dispatch: # Гараар ажиллуулах боломжтой болгоно
 
 jobs:
   build:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-latest # Хамгийн хурдан сервер олдох магадлалтай хувилбар
     steps:
-    
-    # 1. Зай суллах (GitHub Runner-ийн зайг Android-д зориулж бэлдэнэ)
-    - name: Maximize Build Space
-      uses: easimon/maximize-build-space@master
-      with:
-        root-reserve-mb: 2048
-        swap-size-mb: 10240
-        remove-dotnet: 'true'
-        remove-android: 'true'
-        remove-haskell: 'true'
+      - name: Checkout
+        uses: actions/checkout@v4
 
-    # 2. Dependencies суулгах (Ubuntu 20.04 дээр libncurses5 алдаа гарахгүй)
-    - name: Install Dependencies
-      run: |
-        sudo apt-get update
-        sudo apt-get install -y git-core gnupg flex bison build-essential zip curl zlib1g-dev gcc-multilib g++-multilib libc6-dev-i386 libncurses5 lib32ncurses5-dev x11proto-core-dev libx11-dev lib32z1-dev libgl1-mesa-dev libxml2-utils xsltproc unzip fontconfig
+      - name: Cleanup and Maximize Space
+        # GitHub-ийн сервер дээрх хэрэггүй файлуудыг устгаж 30GB+ зай гаргана
+        uses: easimon/maximize-build-space@master
+        with:
+          root-reserve-mb: 512
+          swap-size-mb: 10240 # 10GB Swap нэмж RAM-ыг дэмжинэ
+          remove-dotnet: 'true'
+          remove-android: 'true'
+          remove-haskell: 'true'
 
-    - name: Install Repo Tool
-      run: |
-        mkdir -p ~/bin
-        curl https://storage.googleapis.com/git-repo-downloads/repo > ~/bin/repo
-        chmod a+x ~/bin/repo
-        export PATH=~/bin:$PATH
+      - name: Install Build Dependencies
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y bc build-essential git-core gnupg flex bison gperf libsdl1.2-dev libesd0-dev libwxgtk3.0-gtk3-dev squashfs-tools build-essential zip curl libncurses5-dev zlib1g-dev openjdk-8-jdk libreadline-dev libxml2 libxml2-utils xsltproc unzip device-tree-compiler python3 python3-pip
 
-    # 3. Source татах (Minimal Manifest 12.1)
-    - name: Repo Init & Sync
-      run: |
-        export PATH=~/bin:$PATH
-        mkdir twrp
-        cd twrp
-        git config --global user.name "GitHub Action"
-        git config --global user.email "action@github.com"
-        repo init --depth=1 -u https://github.com/minimal-manifest-twrp/platform_manifest_twrp_aosp.git -b twrp-12.1
-        repo sync -c -j$(nproc) --force-sync --no-clone-bundle --no-tags
+      - name: Install Repo Tool
+        run: |
+          mkdir -p ~/bin
+          curl https://storage.googleapis.com/git-repo-downloads/repo > ~/bin/repo
+          chmod a+x ~/bin/repo
+          sudo ln -sf ~/bin/repo /usr/bin/repo
 
-    # 4. Таны Device Tree-г хуулах
-    - name: Clone Device Tree
-      run: |
-        cd twrp
-        git clone https://github.com/Cosmic802/android_device_samsung_a71x -b main device/samsung/a71x
+      - name: Initialize Repo and Sync
+        run: |
+          mkdir workspace
+          cd workspace
+          git config --global user.name "Cosmic802"
+          git config --global user.email "example@mail.com"
+          # TWRP 12.1 эсвэл өөрийн хүссэн branch-аа энд бичнэ
+          repo init --depth=1 -u https://github.com/minimal-manifest-twrp/platform_manifest_twrp_aosp.git -b twrp-12.1
+          repo sync -j$(nproc --all) --force-sync --no-tags --no-clone-bundle
 
-    # 5. Build хийх (omni_a71x-eng)
-    - name: Build TWRP
-      run: |
-        cd twrp
-        export ALLOW_MISSING_DEPENDENCIES=true
-        . build/envsetup.sh
-        lunch omni_a71x-eng
-        mka recoveryimage
+      - name: Clone Device Tree
+        run: |
+          cd workspace
+          # Өөрийн device tree-г энд оруулна
+          git clone https://github.com/Cosmic802/A716s-UNOFFICAL-TWRP.git -b main device/samsung/a716s
 
-    # 6. Үр дүнг хадгалах (Artifacts)
-    - name: Upload Result
-      uses: actions/upload-artifact@v4
-      with:
-        name: TWRP-A716S-Build
-        path: |
-          twrp/out/target/product/a71x/*.img
-          twrp/out/target/product/a71x/*.zip
+      - name: Build TWRP
+        run: |
+          cd workspace
+          export ALLOW_MISSING_DEPENDENCIES=true
+          source build/envsetup.sh
+          # lunch тушаалыг өөрийн төхөөрөмжид тааруулж өөрчил (жишээ нь: twrp_a716s-eng)
+          lunch twrp_a716s-eng 
+          mka recoveryimage -j$(nproc --all)
+
+      - name: Upload Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: TWRP-Image
+          path: workspace/out/target/product/a716s/recovery.img
