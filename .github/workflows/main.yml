@@ -1,4 +1,4 @@
-name: Recovery Build Final Attempt 1
+name: Recovery Build Final Fix
 
 on:
   workflow_dispatch:
@@ -35,35 +35,43 @@ jobs:
 
       - name: Initialize and Sync
         run: |
-          # Move workspace to the larger partition created by maximize-build-space
           mkdir -p ${{ github.workspace }}/workspace
           cd ${{ github.workspace }}/workspace
           git config --global user.name "Cosmic802"
           git config --global user.email "example@mail.com"
-          
-          # Initialize with extreme shallow settings
           repo init --depth=1 -u https://github.com/minimal-manifest-twrp/platform_manifest_twrp_aosp.git -b twrp-12.1
-          
-          # Sync with -j4 to avoid overwhelming the disk I/O, and only fetch current branch
           repo sync -c -j4 --force-sync --no-tags --no-clone-bundle --optimized-fetch --prune
 
-      - name: Clone Device Tree
+      - name: Clone Device Tree and Fix Config
         run: |
           cd ${{ github.workspace }}/workspace
           git clone --depth=1 https://github.com/Cosmic802/A716s-UNOFFICAL-TWRP.git -b main device/samsung/a716s
+          
+          # AUTO-FIX: Find the product makefile and ensure it matches the lunch name
+          cd device/samsung/a716s
+          if [ -f twrp_a716s.mk ]; then
+            echo "Config file already correct."
+          elif [ -f omni_a716s.mk ]; then
+            mv omni_a716s.mk twrp_a716s.mk
+            sed -i 's/omni_a716s/twrp_a716s/g' twrp_a716s.mk
+          else
+            # If the file has a different name, we force rename the most likely candidate
+            mv *.mk twrp_a716s.mk 2>/dev/null || true
+          fi
 
       - name: Build Recovery
         run: |
           cd ${{ github.workspace }}/workspace
           export ALLOW_MISSING_DEPENDENCIES=true
+          # Essential for Samsung builds to prevent common errors
+          export LC_ALL=C
           source build/envsetup.sh
-          lunch twrp_a716s-eng || lunch omni_a716s-eng || lunch aosp_a716s-eng
+          lunch twrp_a716s-eng
           mka recoveryimage -j$(nproc --all)
 
       - name: Upload Result
         uses: actions/upload-artifact@v4
         with:
-          name: TWRP-A716s-Final
+          name: TWRP-A716s-Fixed
           path: |
             ${{ github.workspace }}/workspace/out/target/product/a716s/recovery.img
-            ${{ github.workspace }}/workspace/out/target/product/a716s/*.zip
