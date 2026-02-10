@@ -7,6 +7,8 @@ jobs:
   build:
     runs-on: ubuntu-20.04
     steps:
+    
+    # 1. Зай суллах (GitHub Runner-ийн зайг Android-д зориулж бэлдэнэ)
     - name: Maximize Build Space
       uses: easimon/maximize-build-space@master
       with:
@@ -16,33 +18,37 @@ jobs:
         remove-android: 'true'
         remove-haskell: 'true'
 
+    # 2. Dependencies суулгах (Ubuntu 20.04 дээр libncurses5 алдаа гарахгүй)
     - name: Install Dependencies
       run: |
         sudo apt-get update
         sudo apt-get install -y git-core gnupg flex bison build-essential zip curl zlib1g-dev gcc-multilib g++-multilib libc6-dev-i386 libncurses5 lib32ncurses5-dev x11proto-core-dev libx11-dev lib32z1-dev libgl1-mesa-dev libxml2-utils xsltproc unzip fontconfig
 
-    - name: Get Repo Tool
+    - name: Install Repo Tool
       run: |
-        mkdir ~/bin
+        mkdir -p ~/bin
         curl https://storage.googleapis.com/git-repo-downloads/repo > ~/bin/repo
         chmod a+x ~/bin/repo
         export PATH=~/bin:$PATH
 
-    - name: Sync Source
+    # 3. Source татах (Minimal Manifest 12.1)
+    - name: Repo Init & Sync
       run: |
         export PATH=~/bin:$PATH
         mkdir twrp
         cd twrp
-        git config --global user.name "Cosmic802"
+        git config --global user.name "GitHub Action"
         git config --global user.email "action@github.com"
         repo init --depth=1 -u https://github.com/minimal-manifest-twrp/platform_manifest_twrp_aosp.git -b twrp-12.1
         repo sync -c -j$(nproc) --force-sync --no-clone-bundle --no-tags
 
+    # 4. Таны Device Tree-г хуулах
     - name: Clone Device Tree
       run: |
         cd twrp
         git clone https://github.com/Cosmic802/android_device_samsung_a71x -b main device/samsung/a71x
 
+    # 5. Build хийх (omni_a71x-eng)
     - name: Build TWRP
       run: |
         cd twrp
@@ -51,8 +57,11 @@ jobs:
         lunch omni_a71x-eng
         mka recoveryimage
 
+    # 6. Үр дүнг хадгалах (Artifacts)
     - name: Upload Result
       uses: actions/upload-artifact@v4
       with:
-        name: TWRP-A716S-Result
-        path: twrp/out/target/product/a71x/*.img
+        name: TWRP-A716S-Build
+        path: |
+          twrp/out/target/product/a71x/*.img
+          twrp/out/target/product/a71x/*.zip
