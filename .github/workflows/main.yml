@@ -1,29 +1,30 @@
 name: Recovery Build
 
 on:
-  workflow_dispatch: # Гараар ажиллуулах боломжтой болгоно
+  workflow_dispatch:
 
 jobs:
   build:
-    runs-on: ubuntu-latest # Хамгийн хурдан сервер олдох магадлалтай хувилбар
+    runs-on: ubuntu-latest
     steps:
+      - name: Free Disk Space
+        uses: jlumbroso/free-disk-space@main
+        with:
+          tool-cache: true
+          android: true
+          dotnet: true
+          haskell: true
+          large-packages: true
+          docker-images: true
+          swap-storage: true
+
       - name: Checkout
         uses: actions/checkout@v4
 
-      - name: Cleanup and Maximize Space
-        # GitHub-ийн сервер дээрх хэрэггүй файлуудыг устгаж 30GB+ зай гаргана
-        uses: easimon/maximize-build-space@master
-        with:
-          root-reserve-mb: 512
-          swap-size-mb: 10240 # 10GB Swap нэмж RAM-ыг дэмжинэ
-          remove-dotnet: 'true'
-          remove-android: 'true'
-          remove-haskell: 'true'
-
-      - name: Install Build Dependencies
+      - name: Install Dependencies
         run: |
           sudo apt-get update
-          sudo apt-get install -y bc build-essential git-core gnupg flex bison gperf libsdl1.2-dev libesd0-dev libwxgtk3.0-gtk3-dev squashfs-tools build-essential zip curl libncurses5-dev zlib1g-dev openjdk-8-jdk libreadline-dev libxml2 libxml2-utils xsltproc unzip device-tree-compiler python3 python3-pip
+          sudo apt-get install -y bc build-essential git-core gnupg flex bison gperf libsdl1.2-dev libesd0-dev libwxgtk3.0-gtk3-dev squashfs-tools zip curl libncurses5-dev zlib1g-dev openjdk-8-jdk libreadline-dev libxml2 libxml2-utils xsltproc unzip device-tree-compiler python3 python3-pip
 
       - name: Install Repo Tool
         run: |
@@ -32,33 +33,30 @@ jobs:
           chmod a+x ~/bin/repo
           sudo ln -sf ~/bin/repo /usr/bin/repo
 
-      - name: Initialize Repo and Sync
+      - name: Initialize and Sync
         run: |
           mkdir workspace
           cd workspace
           git config --global user.name "Cosmic802"
           git config --global user.email "example@mail.com"
-          # TWRP 12.1 эсвэл өөрийн хүссэн branch-аа энд бичнэ
           repo init --depth=1 -u https://github.com/minimal-manifest-twrp/platform_manifest_twrp_aosp.git -b twrp-12.1
-          repo sync -j$(nproc --all) --force-sync --no-tags --no-clone-bundle
+          repo sync -c -j$(nproc --all) --force-sync --no-tags --no-clone-bundle
 
       - name: Clone Device Tree
         run: |
           cd workspace
-          # Өөрийн device tree-г энд оруулна
-          git clone https://github.com/Cosmic802/A716s-UNOFFICAL-TWRP.git -b main device/samsung/a716s
+          git clone --depth=1 https://github.com/Cosmic802/A716s-UNOFFICAL-TWRP.git -b main device/samsung/a716s
 
-      - name: Build TWRP
+      - name: Build Recovery
         run: |
           cd workspace
           export ALLOW_MISSING_DEPENDENCIES=true
           source build/envsetup.sh
-          # lunch тушаалыг өөрийн төхөөрөмжид тааруулж өөрчил (жишээ нь: twrp_a716s-eng)
-          lunch twrp_a716s-eng 
+          lunch twrp_a716s-eng
           mka recoveryimage -j$(nproc --all)
 
-      - name: Upload Artifact
+      - name: Upload Result
         uses: actions/upload-artifact@v4
         with:
-          name: TWRP-Image
+          name: TWRP-A716s
           path: workspace/out/target/product/a716s/recovery.img
