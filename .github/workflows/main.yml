@@ -7,16 +7,22 @@ jobs:
   build:
     runs-on: ubuntu-latest
     steps:
-      - name: Free Disk Space
-        uses: jlumbroso/free-disk-space@main
-        with:
-          tool-cache: true
-          android: true
-          dotnet: true
-          haskell: true
-          large-packages: true
-          docker-images: true
-          swap-storage: true
+      - name: Maximize Build Space
+        run: |
+          sudo rm -rf /usr/share/dotnet
+          sudo rm -rf /usr/local/lib/android
+          sudo rm -rf /opt/ghc
+          sudo rm -rf /usr/local/share/boost
+          sudo rm -rf /usr/local/lib/node_modules
+          sudo rm -rf /usr/local/bin/aliyun
+          sudo rm -rf /usr/local/bin/azcopy
+          sudo rm -rf /usr/local/bin/bicep
+          sudo rm -rf /usr/local/bin/oc
+          sudo rm -rf /usr/local/bin/oras
+          sudo apt-get lateral-clean
+          docker rmi $(docker images -q)
+          sudo apt-get clean
+          df -h
 
       - name: Checkout
         uses: actions/checkout@v4
@@ -26,20 +32,21 @@ jobs:
           sudo apt-get update
           sudo apt-get install -y bc build-essential git-core gnupg flex bison gperf libsdl1.2-dev libesd0-dev libwxgtk3.0-gtk3-dev squashfs-tools zip curl libncurses5-dev zlib1g-dev openjdk-8-jdk libreadline-dev libxml2 libxml2-utils xsltproc unzip device-tree-compiler python3 python3-pip
 
-      - name: Install Repo Tool
+      - name: Install Repo
         run: |
           mkdir -p ~/bin
           curl https://storage.googleapis.com/git-repo-downloads/repo > ~/bin/repo
           chmod a+x ~/bin/repo
           sudo ln -sf ~/bin/repo /usr/bin/repo
 
-      - name: Initialize and Sync
+      - name: Sync Source
         run: |
           mkdir workspace
           cd workspace
           git config --global user.name "Cosmic802"
           git config --global user.email "example@mail.com"
           repo init --depth=1 -u https://github.com/minimal-manifest-twrp/platform_manifest_twrp_aosp.git -b twrp-12.1
+          # Sync only what is absolutely necessary
           repo sync -c -j$(nproc --all) --force-sync --no-tags --no-clone-bundle
 
       - name: Clone Device Tree
@@ -47,7 +54,7 @@ jobs:
           cd workspace
           git clone --depth=1 https://github.com/Cosmic802/A716s-UNOFFICAL-TWRP.git -b main device/samsung/a716s
 
-      - name: Build Recovery
+      - name: Build
         run: |
           cd workspace
           export ALLOW_MISSING_DEPENDENCIES=true
@@ -55,7 +62,7 @@ jobs:
           lunch twrp_a716s-eng
           mka recoveryimage -j$(nproc --all)
 
-      - name: Upload Result
+      - name: Upload
         uses: actions/upload-artifact@v4
         with:
           name: TWRP-A716s
